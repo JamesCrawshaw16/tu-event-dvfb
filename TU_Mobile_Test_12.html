@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>TU Mobile Identity Check</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background-image: url('https://raw.githubusercontent.com/JamesCrawshaw16/tu-mobile-assets/refs/heads/main/9f17c3d5-d04e-4b84-8cc6-7baf6e95e222.png');
+      background-size: cover;
+      background-repeat: no-repeat;
+      background-position: center;
+      background-attachment: fixed;
+    }
+    .container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      backdrop-filter: brightness(0.85);
+    }
+    .content {
+      display: flex;
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 12px;
+      padding: 2em;
+      box-shadow: 0 0 15px rgba(0,0,0,0.2);
+      max-width: 900px;
+      width: 100%;
+    }
+    .form-area {
+      flex: 2;
+    }
+    .logo-area {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding-left: 1em;
+    }
+    .logo-area img {
+      max-height: 300px;
+      width: auto;
+    }
+    input, button {
+     display: block;
+     width: 100%;
+     max-width: 400px;
+     margin: 0.6em auto;
+     padding: 0.75em;
+     font-size: 1em;
+     box-sizing: border-box;
+     border-radius: 6px;
+    }
+    button:hover {
+        background-color: #005f7f;
+    }
+
+    button {
+      background-color: #0078A0;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #005f7f;
+    }
+    #countdown {
+      font-weight: bold;
+      margin: 1em 0;
+      color: #0078A0;
+    }
+    #checkResultsNote {
+      color: #555;
+      font-style: italic;
+      margin-bottom: 1em;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="content">
+      <div class="form-area">
+        <h2>We just need to make sure you are who you say you are 😉</h2>
+        <div id="formInputs">
+         <input type="text" id="name" placeholder="Full Name" required />
+         <input type="text" id="email" placeholder="Phone Number or Email Address" required />
+         <button id="generate">🚀 I'm ready to go!</button>
+        </div>
+
+        <div id="countdown"></div>
+        <div id="output"></div>
+        <div id="checkResultsNote" style="display:none;">⏱️ Wait at least 5 seconds after your check before clicking the button below.</div>
+        <button id="checkResults" style="display:none;">Check Results</button>
+        <div id="formattedResults"></div>
+      </div>
+      <div class="logo-area">
+        <img src="https://raw.githubusercontent.com/JamesCrawshaw16/tu-mobile-assets/refs/heads/main/602a5b4d-8a38-466a-830c-cf9b7666d4aa.png" alt="TU Mobile Logo" />
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let uniqueId = null;
+    let token = null;
+
+    function generateUniqueCode() {
+      const now = new Date();
+      const pad = (n) => n.toString().padStart(2, '0');
+      return `${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${Math.floor(Math.random() * 900 + 100)}`;
+    }
+
+    document.getElementById("generate").addEventListener("click", async () => {
+      const name = document.getElementById("name").value.trim();
+      const email = document.getElementById("email").value.trim();
+      const output = document.getElementById("output");
+      const countdownEl = document.getElementById("countdown");
+
+      if (!name || !email) {
+        output.innerHTML = "❌ Please complete all fields.";
+        return;
+      }
+
+      document.getElementById("formInputs").style.display = "none";
+      output.style.display = "block";
+      output.innerHTML = "⏳ Generating QR code.";
+
+      uniqueId = generateUniqueCode();
+      const clientRequestID = "req" + uniqueId;
+
+      try {
+        const authRes = await fetch("https://auth.idmission.com/auth/realms/identity/protocol/openid-connect/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            grant_type: "password",
+            client_id: "63739",
+            client_secret: "aKwECmD7QUutNTl7BcEZ63WTBUtS09L0",
+            username: "ev_integ_63739",
+            password: "Tran#28337$"
+          })
+        });
+        const authData = await authRes.json();
+        token = authData.access_token;
+
+        const requestBody = {
+          customerData: {
+            requestType: "IDV-FACE",
+            email,
+            mobileNumber: email,
+            personalData: {
+              uniqueNumber: uniqueId,
+              name
+            }
+          },
+          additionalData: {
+            uniqueRequestId: clientRequestID,
+            clientCustomerNumber: uniqueId,
+            clientRequestID: clientRequestID,
+            notifyLink: "true",
+            linkExpireTime: "3D",
+            amount: "100.00"
+          }
+        };
+
+        const qrRes = await fetch("https://api.idmission.com/v4/customer/generate-identity-link", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(requestBody)
+        });
+
+        const qrData = await qrRes.json();
+        const qr = qrData?.customerData?.qrCode;
+        if (!qr) {
+          output.innerHTML = "❌ QR generation failed.";
+          return;
+        }
+
+        output.innerHTML = `<img id="qrImage" src="data:image/jpeg;base64,${qr}" style="max-width:300px;" />`;
+
+        let counter = 20;
+countdownEl.textContent = `🧨 This QR will self-destruct in ${counter} seconds!`;
+const timer = setInterval(() => {
+  counter--;
+  countdownEl.textContent = `🧨 This QR will self-destruct in ${counter} seconds!`;
+  if (counter === 0) {
+    clearInterval(timer);
+    document.getElementById("qrImage").style.display = "none";
+    countdownEl.style.display = "none";
+
+    // Add the explosion
+    const kaboom = document.createElement("div");
+    kaboom.id = "kaboom";
+    kaboom.textContent = "💥 BOOM!";
+    document.getElementById("output").appendChild(kaboom);
+
+    // After animation, show the results button
+    setTimeout(() => {
+      document.getElementById("checkResults").style.display = "inline-block";
+      document.getElementById("checkResultsNote").style.display = "block";
+    }, 1000);
+  }
+}, 1000);  // ✅ This line was missing
+
+
+      } catch (err) {
+        output.innerHTML = "❌ Something went wrong generating the QR code.";
+      }
+    });
+
+   document.getElementById("checkResults").addEventListener("click", async () => {
+  document.getElementById("checkResults").style.display = "none";
+  document.getElementById("checkResultsNote").style.display = "none";
+
+  try {
+    const res = await fetch("https://api.idmission.com/v4/customer/get-processed-data", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        additionalData: {
+          clientCustomerNumber: uniqueId,
+          sendInputImages: "N",
+          sendProcessedImages: "N",
+          stripSpecialCharacters: "Y",
+          sendHostDataInPost: "N",
+          sendSignatureFromIdInResponse: "N",
+          sendDocumentIdInResponse: "N",
+          sendMetaDataInResponse: "N"
+        }
+      })
+    });
+
+    const data = await res.json();
+
+    const verificationResult = data?.resultData?.verificationResult || "";
+    const idNotExpired = data?.responseCustomerData?.extractedIdData?.idNotExpired || "";
+    const idType = data?.responseCustomerData?.extractedIdData?.idType || "";
+    if (!verificationResult && !idNotExpired && !idType) {
+  throw new Error("Results not ready yet");
+}
+
+    let resultHTML = `<ul style="list-style:none; padding-left:0; text-align:left;">`;
+
+    if (verificationResult.toLowerCase() === "approved") {
+      resultHTML += `<li>✅ Your ID check has passed</li>`;
+    } else {
+      resultHTML += `<li>❌ Your ID check has failed</li>`;
+    }
+
+    if (idNotExpired === "Y") {
+      resultHTML += `<li>✅ Your ID is in date</li>`;
+    } else if (idNotExpired === "N") {
+      resultHTML += `<li>❌ Your ID is expired</li>`;
+    } else {
+      resultHTML += `<li>⚠️ Could not confirm if your ID is expired</li>`;
+    }
+
+    resultHTML += `<li>✅ That name matches the one we've got on file</li>`;
+
+    if (idType === "DL") {
+      resultHTML += `<li>✅ This address matches the one we've got on file</li>`;
+    } else {
+      resultHTML += `<li>📄 Looks like we might need another document to prove your address</li>`;
+    }
+
+    resultHTML += `</ul>`;
+    document.getElementById("formattedResults").innerHTML = resultHTML;
+
+  } catch (err) {
+    document.getElementById("formattedResults").innerHTML = "⚠️ Uh-oh, too quick. Give it a sec and Try again.";
+    document.getElementById("checkResults").style.display = "inline-block";
+    document.getElementById("checkResultsNote").style.display = "block";
+  }
+});
+  </script>
+</body>
+</html>
